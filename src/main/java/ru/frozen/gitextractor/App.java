@@ -20,26 +20,51 @@ public class App {
     private static final Logger log = LogManager.getLogger(App.class);
 
     private static final String GITHUB_API_URL = "api.github.com";
-    private static final String USAGE = "USAGE: .\\App configFile";
     private static final String FILE_SYSTEM_BACKUP = "fileSystem";
     private static final String PASSWORD_PROMPT = "Enter password:";
-    private static final String GITHUB_EXTRACT_FAIL_MSG = "Failed to extract from github.";
+
+    private static final String GITHUB_EXTRACT_ERROR = "Failed to extract from github.";
+    private static final String CFG_FILE_ERROR = "Error reading configuration file.";
+    private static final String CFG_FILE_CONTENT_ERROR =
+            "Configuration file must contain line with: repositoryName " + "userName updateTimeMinutes backupType " + "pathToBackUp.";
+    private static final String CFG_FILE_MINUTES_ERROR = "Error parsing updateTimeMinutes.";
+    private static final String APP_CONSOLE_LAUNCH_ERROR = "This application must be launched from console.";
 
     public static void main(String[] args) {
         String[] argsLine;
         try (BufferedReader br = new BufferedReader(new FileReader(args[0]))) {
             argsLine = br.readLine().split(" ");
         } catch (IOException e) {
-            log.error(e.getMessage(), e);
-            return;
+            log.error(CFG_FILE_ERROR, e);
+            throw new RuntimeException(e);
         }
+        String reponame;
+        String user;
+        long backupPeriodMinutes;
+        String backupType;
+        String targetFolder;
         try {
-            String user = argsLine[1];
-            String reponame = argsLine[0];
-            String targetFolder = argsLine[4];
-            if (argsLine[3].equals(FILE_SYSTEM_BACKUP)) {
-                Console console = System.console();
-                char[] password = console.readPassword(PASSWORD_PROMPT);
+            reponame = argsLine[0];
+            user = argsLine[1];
+            backupPeriodMinutes = Long.parseLong(argsLine[2]);
+            backupType = argsLine[3];
+            targetFolder = argsLine[4];
+        } catch (IndexOutOfBoundsException e) {
+            log.error(CFG_FILE_CONTENT_ERROR, e);
+            throw new RuntimeException(e);
+        } catch (NumberFormatException e) {
+            log.error(CFG_FILE_MINUTES_ERROR, e);
+            throw  new RuntimeException(e);
+        }
+        if (backupType.equals(FILE_SYSTEM_BACKUP)) {
+            Console console = System.console();
+            if (console == null) {
+                RuntimeException e = new RuntimeException(APP_CONSOLE_LAUNCH_ERROR);
+                log.error(APP_CONSOLE_LAUNCH_ERROR, e);
+                throw e;
+            }
+            char[] password = console.readPassword(PASSWORD_PROMPT);
+            try {
                 GitHubExtractor extractor = new GitHubExtractor(GITHUB_API_URL, user, new String(password));
                 extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
                 final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -47,22 +72,17 @@ public class App {
                     try {
                         extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
                     } catch (IOException e) {
-                        log.error(GITHUB_EXTRACT_FAIL_MSG, e);
+                        log.error(GITHUB_EXTRACT_ERROR, e);
                     }
                 };
-                long delayInMinutes = Long.parseLong(argsLine[2]);
-                final ScheduledFuture<?> applierHandle = scheduler.scheduleAtFixedRate(applier, delayInMinutes,
-                        delayInMinutes, MINUTES);
+                final ScheduledFuture<?> applierHandle = scheduler.scheduleAtFixedRate(applier, backupPeriodMinutes,
+                        backupPeriodMinutes, MINUTES);
                 scheduler.schedule(() -> {
                     applierHandle.cancel(true);
-                }, delayInMinutes, MINUTES);
-            } else {
-                System.out.println(USAGE);
+                }, backupPeriodMinutes, MINUTES);
+            } catch (IOException e) {
+                log.error(GITHUB_EXTRACT_ERROR, e);
             }
-        } catch (IOException e) {
-            log.error(GITHUB_EXTRACT_FAIL_MSG, e);
-        } catch (IndexOutOfBoundsException e) {
-            System.out.println(USAGE);
         }
     }
 
