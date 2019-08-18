@@ -1,7 +1,6 @@
 package ru.frozen.gitextractor;
 
-import java.io.Console;
-import java.io.IOException;
+import java.io.*;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.Executors;
@@ -21,33 +20,37 @@ public class App {
     private static final Logger log = LogManager.getLogger(App.class);
 
     private static final String GITHUB_API_URL = "api.github.com";
-    private static final String USAGE = "USAGE: .\\App repositoryName userName updateTimeINMinutes backupType " +
-            "pathToBackUp";
+    private static final String USAGE = "USAGE: .\\App configFile";
     private static final String FILE_SYSTEM_BACKUP = "fileSystem";
     private static final String PASSWORD_PROMPT = "Enter password:";
     private static final String GITHUB_EXTRACT_FAIL_MSG = "Failed to extract from github.";
 
     public static void main(String[] args) {
+        String[] argsLine;
+        try (BufferedReader br = new BufferedReader(new FileReader(args[0]))) {
+            argsLine = br.readLine().split(" ");
+        } catch (IOException e) {
+            log.error(e.getMessage(), e);
+            return;
+        }
         try {
-            String user = args[1];
-            String reponame = args[0];
-            String targetFolder = args[4];
-            if (args[3].equals(FILE_SYSTEM_BACKUP)) {
+            String user = argsLine[1];
+            String reponame = argsLine[0];
+            String targetFolder = argsLine[4];
+            if (argsLine[3].equals(FILE_SYSTEM_BACKUP)) {
                 Console console = System.console();
                 char[] password = console.readPassword(PASSWORD_PROMPT);
                 GitHubExtractor extractor = new GitHubExtractor(GITHUB_API_URL, user, new String(password));
-                extractor.extract(reponame,
-                        new FileSystemApplier(targetFolder + getSnapshotName()));
+                extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
                 final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
                 final Runnable applier = () -> {
                     try {
-                        extractor.extract(reponame,
-                                new FileSystemApplier(targetFolder + getSnapshotName()));
+                        extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
                     } catch (IOException e) {
                         log.error(GITHUB_EXTRACT_FAIL_MSG, e);
                     }
                 };
-                long delayInMinutes = Long.parseLong(args[2]);
+                long delayInMinutes = Long.parseLong(argsLine[2]);
                 final ScheduledFuture<?> applierHandle = scheduler.scheduleAtFixedRate(applier, delayInMinutes,
                         delayInMinutes, MINUTES);
                 scheduler.schedule(() -> {
