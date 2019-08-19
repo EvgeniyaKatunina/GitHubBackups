@@ -3,9 +3,8 @@ package ru.frozen.gitextractor;
 import java.io.*;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
@@ -54,13 +53,13 @@ public class App {
             backupPeriod = Long.parseLong(argsLine[2]);
             String timeUnitArg = argsLine[3];
             if (timeUnitArg.equals(SECONDS.name())) {
-                timeUnit = SECONDS;
+                backupPeriod = SECONDS.toMillis(backupPeriod);
             } else if (timeUnitArg.equals(MINUTES.name())) {
-                timeUnit = MINUTES;
+                backupPeriod = MINUTES.toMillis(backupPeriod);
             } else if (timeUnitArg.equals(HOURS.name())) {
-                timeUnit = HOURS;
+                backupPeriod = HOURS.toMillis(backupPeriod);
             } else if (timeUnitArg.equals(DAYS.name())) {
-                timeUnit = DAYS;
+                backupPeriod = DAYS.toMillis(backupPeriod);
             } else {
                 RuntimeException e = new RuntimeException(BACKUP_PERIOD_UNIT_ERROR);
                 log.error(BACKUP_PERIOD_UNIT_ERROR, e);
@@ -86,19 +85,17 @@ public class App {
             try {
                 GitHubExtractor extractor = new GitHubExtractor(GITHUB_API_URL, user, new String(password));
                 extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
-                final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-                final Runnable applier = () -> {
-                    try {
-                        extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
-                    } catch (Exception e) {
-                        log.error(e.getMessage(), e);
+                Timer timer = new Timer();
+                timer.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        try {
+                            extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
+                        } catch (Exception e) {
+                            log.error(e.getMessage(), e);
+                        }
                     }
-                };
-                final ScheduledFuture<?> applierHandle = scheduler.scheduleAtFixedRate(applier, backupPeriod,
-                        backupPeriod, timeUnit);
-                scheduler.schedule(() -> {
-                    applierHandle.cancel(true);
-                }, backupPeriod, timeUnit);
+                }, backupPeriod, backupPeriod);
             } catch (IOException e) {
                 log.error(GITHUB_EXTRACT_ERROR, e);
             }
