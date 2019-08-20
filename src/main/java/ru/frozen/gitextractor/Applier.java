@@ -8,4 +8,5 @@ public interface Applier {
 
 	void apply(RepositoryContents e) throws IOException;
 
+	void applyProperties(String Sha) throws IOException;
 }

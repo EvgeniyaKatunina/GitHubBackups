@@ -2,6 +2,8 @@ package ru.frozen.gitextractor;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -38,7 +40,7 @@ public class FileSystemApplier implements Applier {
 		File file = new File(dest, e.getPath());
 		if (RepositoryContents.TYPE_FILE.equals(e.getType())) {
 			if (file.exists()) {
-				log.warn("File '{}' will be overritten.", file.getAbsolutePath());
+				log.warn("File '{}' will be ovewritten.", file.getAbsolutePath());
 			} else {
 				file.getParentFile().mkdirs();
 				file.createNewFile();
@@ -50,6 +52,22 @@ public class FileSystemApplier implements Applier {
 				log.warn("Cannot create destination folder '{}'.", file.getAbsolutePath());
 			}
 		}
+	}
+
+	@Override
+	public void applyProperties(String sha) throws IOException {
+		String fileName = ".properties";
+		log.info("Applying {}.", fileName);
+		File file = new File(dest, fileName);
+		if (file.exists()) {
+			log.warn("File '{}' will be ovewritten.", file.getAbsolutePath());
+		} else {
+			file.getParentFile().mkdirs();
+			file.createNewFile();
+		}
+		PrintWriter pw = new PrintWriter(file.getAbsolutePath());
+		pw.println(sha);
+		pw.close();
 	}
 
 }
