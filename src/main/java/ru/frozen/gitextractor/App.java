@@ -5,11 +5,11 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.util.concurrent.TimeUnit.*;
 
 /**
@@ -21,7 +21,6 @@ public class App {
 
     private static final String GITHUB_API_URL = "api.github.com";
     private static final String FILE_SYSTEM_BACKUP = "fileSystem";
-    private static final String PASSWORD_PROMPT = "Enter password:";
 
     private static final String GITHUB_EXTRACT_ERROR = "Failed to extract from github.";
     private static final String CFG_FILE_ERROR = "Error reading configuration file.";
@@ -29,9 +28,12 @@ public class App {
             "Configuration file must contain line with: repositoryName " + "userName updateTime updateTimeUnit " +
                     "backupType " + "pathToBackUp.";
     private static final String CFG_FILE_MINUTES_ERROR = "Error parsing updateTimeMinutes.";
-    private static final String APP_CONSOLE_LAUNCH_ERROR = "This application must be launched from console.";
     private static final String BACKUP_PERIOD_UNIT_ERROR =
             "UpdateTimeUnit must be " + MINUTES.name() + ", " + HOURS.name() + ", " + SECONDS.name() + " or " + DAYS.name() + ".";
+    private static final String PASSWORD_PROMPT = "Enter password:";
+    private static final String APP_CONSOLE_LAUNCH_ERROR = "This application must be launched from console.";
+
+    static Applier.Update lastUpdate;
 
     public static void main(String[] args) {
         String[] argsLine;
@@ -43,23 +45,22 @@ public class App {
         }
         String reponame;
         String user;
-        long backupPeriod;
-        TimeUnit timeUnit;
+        long backupPeriodMs;
         String backupType;
         String targetFolder;
         try {
             reponame = argsLine[0];
             user = argsLine[1];
-            backupPeriod = Long.parseLong(argsLine[2]);
+            backupPeriodMs = Long.parseLong(argsLine[2]);
             String timeUnitArg = argsLine[3];
             if (timeUnitArg.equals(SECONDS.name())) {
-                backupPeriod = SECONDS.toMillis(backupPeriod);
+                backupPeriodMs = SECONDS.toMillis(backupPeriodMs);
             } else if (timeUnitArg.equals(MINUTES.name())) {
-                backupPeriod = MINUTES.toMillis(backupPeriod);
+                backupPeriodMs = MINUTES.toMillis(backupPeriodMs);
             } else if (timeUnitArg.equals(HOURS.name())) {
-                backupPeriod = HOURS.toMillis(backupPeriod);
+                backupPeriodMs = HOURS.toMillis(backupPeriodMs);
             } else if (timeUnitArg.equals(DAYS.name())) {
-                backupPeriod = DAYS.toMillis(backupPeriod);
+                backupPeriodMs = DAYS.toMillis(backupPeriodMs);
             } else {
                 RuntimeException e = new RuntimeException(BACKUP_PERIOD_UNIT_ERROR);
                 log.error(BACKUP_PERIOD_UNIT_ERROR, e);
@@ -74,36 +75,65 @@ public class App {
             log.error(CFG_FILE_MINUTES_ERROR, e);
             throw new RuntimeException(e);
         }
+        Timer timer = new Timer();
         if (backupType.equals(FILE_SYSTEM_BACKUP)) {
-            Console console = System.console();
-            if (console == null) {
-                RuntimeException e = new RuntimeException(APP_CONSOLE_LAUNCH_ERROR);
-                log.error(APP_CONSOLE_LAUNCH_ERROR, e);
-                throw e;
-            }
-            char[] password = console.readPassword(PASSWORD_PROMPT);
             try {
-                GitHubExtractor extractor = new GitHubExtractor(GITHUB_API_URL, user, new String(password));
-                extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
-                Timer timer = new Timer();
+                FileSystemApplier applier = new FileSystemApplier(targetFolder + getSnapshotName(reponame));
+                lastUpdate = applier.checkForUpdate(new File(targetFolder), new AESCryptographer());
+                GitHubExtractor extractor;
+                if (lastUpdate == null) {
+                    Console console = System.console();
+                    if (console == null) {
+                        RuntimeException e = new RuntimeException(APP_CONSOLE_LAUNCH_ERROR);
+                        log.error(APP_CONSOLE_LAUNCH_ERROR, e);
+                        throw e;
+                    }
+                    char[] password = console.readPassword(PASSWORD_PROMPT);
+                    extractor = new GitHubExtractor(GITHUB_API_URL, user, new String(password));
+                    lastUpdate = extractor.extract(reponame, applier);
+                } else {
+                    extractor = new GitHubExtractor(GITHUB_API_URL, user, lastUpdate.pass);
+                    long timeSpent = MILLIS.between(lastUpdate.time, ZonedDateTime.now());
+                    long timeToUpdate = backupPeriodMs - timeSpent;
+                    if (timeSpent >= backupPeriodMs) {
+                        extractor.update(reponame, new GitHubProcessor(), applier, lastUpdate.lastCommitSha);
+                    } else {
+                        timer = new Timer();
+                        log.info("Update delayed for " + timeToUpdate);
+                        timer.schedule(new TimerTask() {
+                            @Override
+                            public void run() {
+                                try {
+                                    lastUpdate = extractor.update(reponame, new GitHubProcessor(), applier,
+                                            lastUpdate.lastCommitSha);
+                                } catch (Exception e) {
+                                    log.error(e.getMessage(), e);
+                                }
+                            }
+                        }, timeToUpdate);
+                    }
+                }
                 timer.scheduleAtFixedRate(new TimerTask() {
                     @Override
                     public void run() {
                         try {
-                            extractor.extract(reponame, new FileSystemApplier(targetFolder + getSnapshotName()));
+                            lastUpdate = extractor.update(reponame, new GitHubProcessor(),
+                                    new FileSystemApplier(targetFolder + getSnapshotName(reponame)),
+                                    lastUpdate.lastCommitSha);
                         } catch (Exception e) {
                             log.error(e.getMessage(), e);
                         }
                     }
-                }, backupPeriod, backupPeriod);
+                }, backupPeriodMs, backupPeriodMs);
             } catch (IOException e) {
                 log.error(GITHUB_EXTRACT_ERROR, e);
             }
         }
+
     }
 
-    private static String getSnapshotName() {
-        return "/snapshot " + ZonedDateTime.now().
+    private static String getSnapshotName(String repoName) {
+        return "/" + repoName + " " + ZonedDateTime.now().
                 format(DateTimeFormatter.RFC_1123_DATE_TIME).replaceAll(":", "");
     }
 }

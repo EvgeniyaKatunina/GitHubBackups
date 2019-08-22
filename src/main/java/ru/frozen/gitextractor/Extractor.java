@@ -4,6 +4,8 @@ import java.io.IOException;
 
 public interface Extractor {
 
-	void extract(String repoName, Applier applier) throws IOException;
-	
+    Applier.Update extract(String repoName, Applier applier) throws IOException;
+
+    Applier.Update update(final String repoName, final Processor processor, final Applier applier,
+                          final String lastCommitSha) throws IOException;
 }
