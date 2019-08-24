@@ -96,7 +96,7 @@ public class App {
                     long timeSpent = MILLIS.between(lastUpdate.time, ZonedDateTime.now());
                     long timeToUpdate = backupPeriodMs - timeSpent;
                     if (timeSpent >= backupPeriodMs) {
-                        extractor.update(reponame, new GitHubProcessor(), applier, lastUpdate.lastCommitSha);
+                        extractor.update(reponame, applier, lastUpdate.lastCommitSha);
                     } else {
                         timer = new Timer();
                         log.info("Update delayed for " + timeToUpdate);
@@ -104,8 +104,7 @@ public class App {
                             @Override
                             public void run() {
                                 try {
-                                    lastUpdate = extractor.update(reponame, new GitHubProcessor(), applier,
-                                            lastUpdate.lastCommitSha);
+                                    lastUpdate = extractor.update(reponame, applier, lastUpdate.lastCommitSha);
                                 } catch (Exception e) {
                                     log.error(e.getMessage(), e);
                                 }
@@ -117,7 +116,7 @@ public class App {
                     @Override
                     public void run() {
                         try {
-                            lastUpdate = extractor.update(reponame, new GitHubProcessor(),
+                            lastUpdate = extractor.update(reponame,
                                     new FileSystemApplier(targetFolder + getSnapshotName(reponame)),
                                     lastUpdate.lastCommitSha);
                         } catch (Exception e) {
