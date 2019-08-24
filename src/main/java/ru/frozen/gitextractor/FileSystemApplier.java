@@ -97,7 +97,7 @@ public class FileSystemApplier implements Applier {
     Update lastUpdate;
 
     @Override
-    public Update checkForUpdate(File target, Cryptographer cryptographer) throws IOException {
+    public Update checkForUpdate(File target, Cryptographer cryptographer) {
         lastUpdate = null;
         File[] files = target.listFiles();
         if (files != null) {
@@ -121,17 +121,17 @@ public class FileSystemApplier implements Applier {
                         }
 
                         @Override
-                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                             return FileVisitResult.CONTINUE;
                         }
 
                         @Override
-                        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                        public FileVisitResult visitFileFailed(Path file, IOException exc) {
                             return null;
                         }
 
                         @Override
-                        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                        public FileVisitResult postVisitDirectory(Path dir, IOException exc) {
                             return null;
                         }
                     });
