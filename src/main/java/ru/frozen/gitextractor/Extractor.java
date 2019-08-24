@@ -6,6 +6,6 @@ public interface Extractor {
 
     Applier.Update extract(String repoName, Applier applier) throws IOException;
 
-    Applier.Update update(final String repoName, final Processor processor, final Applier applier,
+    Applier.Update update(final String repoName, final Applier applier,
                           final String lastCommitSha) throws IOException;
 }

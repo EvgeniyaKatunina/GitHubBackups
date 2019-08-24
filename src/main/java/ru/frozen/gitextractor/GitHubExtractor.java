@@ -2,14 +2,14 @@ package ru.frozen.gitextractor;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.eclipse.egit.github.core.Repository;
-import org.eclipse.egit.github.core.RepositoryContents;
+import org.eclipse.egit.github.core.*;
 import org.eclipse.egit.github.core.client.GitHubClient;
 import org.eclipse.egit.github.core.service.CommitService;
 import org.eclipse.egit.github.core.service.ContentsService;
 import org.eclipse.egit.github.core.service.RepositoryService;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.List;
 
 public class GitHubExtractor implements Extractor {
@@ -43,16 +43,20 @@ public class GitHubExtractor implements Extractor {
         init();
         Repository repository = repositoryService.getRepository(username, repoName);
         extract(repository, contentService.getContents(repository), applier);
-        return applier.applyProperties(commitService.getCommits(repository).get(0).getSha(), password, new AESCryptographer());
+        return applier.applyProperties(commitService.getCommits(repository).get(0).getSha(), password,
+                new AESCryptographer());
     }
 
     @Override
-    public Applier.Update update(final String repoName, final Processor processor, final Applier applier,
+    public Applier.Update update(final String repoName, final Applier applier,
                                  final String lastCommitSha) throws IOException {
         init();
         Repository repository = repositoryService.getRepository(username, repoName);
-        extract(repository, contentService.getContents(repository), applier);
-        return applier.applyProperties(commitService.getCommits(repository).get(0).getSha(), password, new AESCryptographer());
+        RepositoryCommitCompare commitCompare = commitService.compare(repository, lastCommitSha,
+                commitService.getCommits(repository).get(0).getSha());
+        applier.storeDiff(new URL(commitCompare.getPatchUrl()));
+        return applier.applyProperties(commitService.getCommits(repository).get(0).getSha(), password,
+                new AESCryptographer());
     }
 
     private void extract(final Repository repository, final List<RepositoryContents> list, final Applier applier) {
