@@ -23,7 +23,7 @@ public class FileSystemApplier implements Applier {
 
     private File dest;
 
-    public FileSystemApplier(String destination) throws IOException {
+    FileSystemApplier(String destination) throws IOException {
         if (destination == null) throw new IllegalArgumentException("Destination target must not be equals to null.");
         this.dest = new File(destination);
         if (this.dest.exists()) {

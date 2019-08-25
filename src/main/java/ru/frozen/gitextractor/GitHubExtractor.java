@@ -55,6 +55,7 @@ public class GitHubExtractor implements Extractor {
         RepositoryCommitCompare commitCompare = commitService.compare(repository, lastCommitSha,
                 commitService.getCommits(repository).get(0).getSha());
         applier.storeDiff(new URL(commitCompare.getPatchUrl()));
+        System.out.println("hello world");
         return applier.applyProperties(commitService.getCommits(repository).get(0).getSha(), password,
                 new AESCryptographer());
     }
